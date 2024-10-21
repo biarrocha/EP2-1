@@ -1,16 +1,21 @@
+
+**Conexão com Neo4j**
+"""
+
 import os
 !pip install neo4j
 from neo4j import GraphDatabase
 
-uri = "bolt://localhost:7687"  # Altere para o URI do seu servidor Neo4j
-username = "neo4j"             # Usuário padrão do Neo4J
-password = "GraphpokeEp2"     # Senha que usei no meu Neo4J
+senha = "4s8-3hxO9yzIpJ1knLtr2mEQ2xcSP-4DZFrPKWeDVOE"
+url = "neo4j+s://08535db0.databases.neo4j.io"
+usuario = "neo4j"
 
-driver = GraphDatabase.driver(uri, auth=(username, password))
+uri = "bolt://localhost:7687"
+driver = GraphDatabase.driver(uri, auth=("neo4j", "password"))
 
-#Vai acionar a query via python
+"""**Criando os Pokemons + Evolução**"""
+
 query = """
-
 CREATE CONSTRAINT IF NOT EXISTS FOR (p:Pokemon) REQUIRE (p.Tipo) IS UNIQUE;
 CREATE INDEX IF NOT EXISTS FOR (p:Pokemon) ON (p.Name, p.Evolucao, p.Cor, p.PesoKg);
 
@@ -57,6 +62,11 @@ CREATE (Static:Habilidade {Tipo: 'Static', Name: 'Static'});
 CREATE (SandVeil:Habilidade {Tipo: 'SandVeil', Name: 'SandVeil'});
 CREATE (ShellArmor:Habilidade {Tipo: 'ShellArmor', Name: 'ShellArmor'});
 
+"""
+
+"""**Criando os Pokemons + Evolução**"""
+
+query = """
 MATCH (pi:Pokemon {Tipo: 'Pikachu'}), (ra:Pokemon {Tipo: 'Raichu'})
 CREATE (pi)-[:Evolucao]->(ra);
 
@@ -82,7 +92,7 @@ MATCH (pi:Pokemon {Tipo: 'Pikachu'}), (ra:Pokemon {Tipo: 'Raichu'}), (el:Element
 CREATE (pi)-[:Elemento]->(el),
        (ra)-[:Elemento]->(el);
 
-MATCH (bu:Pokemon {Tipo: 'Bulbasaur'}), (iv:Pokemon {Tipo: 'Ivysaur'}), (ve:Pokemon {Tipo: 'Venosaur'}), 
+MATCH (bu:Pokemon {Tipo: 'Bulbasaur'}), (iv:Pokemon {Tipo: 'Ivysaur'}), (ve:Pokemon {Tipo: 'Venosaur'}),
       (gr:Elemento {Tipo: 'Grama'}), (po:Elemento {Tipo: 'Veneno'})
 CREATE (bu)-[:Elemento]->(gr), (bu)-[:Elemento]->(po),
        (iv)-[:Elemento]->(gr), (iv)-[:Elemento]->(po),
@@ -162,13 +172,49 @@ CREATE (voa)-[:Forca]->(gr);
 MATCH (el:Elemento {Tipo:'Eletrico'}), (voa:Elemento {Tipo:'Voador'}), (ag:Elemento {Tipo:'Agua'})
 CREATE (el)-[:Forca]->(voa),
        (el)-[:Forca]->(ag);
+
 """
 
-def execute_query(query):
-    with driver.session() as session:
-        session.run(query)
+"""**Consultas**"""
 
-execute_query(query)
+def pokemons_que_podem_atacar_pikachu(tx):
+    query = """
+    MATCH (pi:Pokemon {Tipo: 'Pikachu'})-[:Elemento]->(elPikachu:Elemento)<-[:Forca]-(elAtacante:Elemento)<-[:Elemento]-(p:Pokemon)
+    WHERE p.PesoKg > 10
+    RETURN p.Nome, p.PesoKg, elAtacante.Tipo
+    """
+    result = tx.run(query)
+    return result.data()
+
+def cor_mais_comum_contra_gelo(tx):
+    query = """
+    MATCH (el:Elemento {Tipo: 'Gelo'})-[:Forca]->(:Elemento)<-[:Elemento]-(p:Pokemon)
+    RETURN p.Cor, count(*) AS quantidade
+    ORDER BY quantidade DESC
+    LIMIT 1
+    """
+    result = tx.run(query)
+    return result.data()
+
+def evolucoes_dobrando_peso(tx):
+    query = """
+    MATCH (p1:Pokemon)-[:Evolucao]->(p2:Pokemon)
+    WHERE p2.PesoKg >= 2 * p1.PesoKg
+    RETURN count(p2) AS evolucoes_que_dobram_peso
+    """
+    result = tx.run(query)
+    return result.data()
+
+"""**Impressão**"""
+
+with driver.session() as session:
+    pokemons_atacam_pikachu = session.read_transaction(pokemons_que_podem_atacar_pikachu)
+    print("Pokémons que podem atacar Pikachu e têm mais de 10kg:", pokemons_atacam_pikachu)
+
+    cor_comum_contra_gelo = session.read_transaction(cor_mais_comum_contra_gelo)
+    print("Cor mais comum de Pokémons atacados pelo tipo gelo:", cor_comum_contra_gelo)
+
+    evolucoes_que_dobram_peso = session.read_transaction(evolucoes_dobrando_peso)
+    print("Quantidade de evoluções que fazem o Pokémon dobrar de peso:", evolucoes_que_dobram_peso)
 
 driver.close()
-
